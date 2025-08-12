@@ -1,33 +1,56 @@
 #![allow(unused_imports)]
-use std::net::TcpListener;
-use std::io::Write;
-use std::io::Read;
+use std::io;
+use std::collections::VecDeque;
+use std::collections::HashMap;
+use http::{Request, Response, StatusCode};
+use tokio::io::AsyncReadExt;
+use std::io::prelude::*;
+use tokio::net::{TcpListener, TcpStream};
+use tokio::io::{BufWriter, AsyncWriteExt, AsyncWrite, BufReader, AsyncRead, BufStream, AsyncBufReadExt};
+use tokio::io::split;
 
-fn main() {
-    // You can use print statements as follows for debugging, they'll be visible when running tests.
-    println!("Logs from your program will appear here!");
+#[tokio::main] 
+async fn main() -> io::Result<()> {
+    let listener = TcpListener::bind("127.0.0.1:6379").await?;
 
-    // Uncomment this block to pass the first stage
-    //
-    let listener = TcpListener::bind("127.0.0.1:6379").unwrap();
-    
-    for stream in listener.incoming() {
-        match stream {
-            Ok(mut _stream) => {
-                let mut buf = [0;512];
-                loop {
-                    let read_count = _stream.read(&mut buf).unwrap();
-                    if read_count == 0 {
-                        break;
-                    }
-                    _stream.write_all(b"+PONG\r\n").unwrap();
-                }
-                println!("accepted new connection");
-                _stream.write_all(b"+PONG\r\n").unwrap();
+    loop {
+        let (mut socket, _) = listener.accept().await?;
+
+        let handle = tokio::spawn(async move { 
+            handle_connection(&mut socket).await;
+        });
+    }
+}
+
+async fn handle_connection(stream: &mut TcpStream) {
+    println!("Handling connection");
+
+    let bufStream = BufStream::new(stream);
+    let (mut read_half, mut write_half) = split(bufStream);
+
+    let mut reader = BufReader::new(read_half);
+    let mut writer = BufWriter::new(write_half);
+
+    let mut line = String::new();
+    loop {
+        line.clear();
+        match reader.read_line(&mut line).await {
+            Ok(0) => {
+                println!("Client disconnected");
+                break;
             }
-            Err(e) => {
-                println!("error: {}", e);
+            Ok(data) => {
+                if line.contains("PING"){
+                    // println!("I hope it is being printed only once");
+                    let response = "+PONG\r\n";
+                    writer.write_all(response.as_bytes()).await;
+                    writer.flush().await;
+                }
+            } 
+            Err(err) => {
+                println!("Error: {err}");
             }
         }
     }
 }
+
