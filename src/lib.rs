@@ -1,3 +1,8 @@
+use tokio::net::{TcpListener, TcpStream};
+use tokio::io::{
+    BufWriter, AsyncWriteExt, AsyncWrite, BufReader, AsyncRead, BufStream, AsyncBufReadExt, ReadHalf, WriteHalf
+};
+
 // use std::sync::mpsc::Receiver;
 // use std::{sync::mpsc, sync::Mutex, sync::Arc};
 // use std::thread::{self};
@@ -70,3 +75,210 @@
 //         }
 //     }
 // }
+
+
+// my very own Redis Protocol Parser
+
+// how would you reconcile everything with this parser? 
+
+use std::io::Error;
+
+struct ExecuteEcho {}
+
+struct ExecutePing {}
+
+pub struct Execute {
+    arr : Option<Vec<String>>
+}
+
+pub struct InputReader {
+    value : String
+}
+
+pub struct ParseRedisCliInput {
+    pub stringType : TypeString
+}
+
+
+#[derive(Debug)]
+pub struct NotRedisArrayInput {}
+
+pub enum TypeString {
+    SimpleString(SimpleString),
+    BulkString(BulkString),
+    Arrays(Arrays)
+}
+
+pub struct SimpleString {
+    pub value : String
+}
+
+pub struct BulkString {
+    pub value : String,
+    pub len: usize
+}
+
+pub struct Arrays {
+    pub size: u32
+}
+
+// impl InputReader {
+//     type Reader = BufReader<ReadHalf<BufStream<&mut TcpStream>>>;
+//     pub fn readNext() -> Result<Self,Error>{
+
+//     }
+// }
+
+impl SimpleString {
+    pub async fn new(value: String) -> Self {
+        let newValue = "+".to_owned() + &value + "\r\n";
+        Self {
+            value: newValue
+        }
+    }
+}
+
+// impl std::fmt::Display for NotRedisArrayInput {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "({}, {})", self.x, self.y)
+//     }
+// }
+
+impl BulkString {
+    pub async fn new(input: String) -> Self {
+        Self {
+            len: input.len(),
+            value : input
+        }
+    }
+    pub async fn toBulkString(input: String) -> Self {
+        let mut newString = input.clone();
+        let length = input.len().to_string();
+        // let length = input.try
+        newString = "$".to_string() + &length + &"\r\n".to_string() + &input + &"\r\n".to_string(); 
+
+        Self {
+            len: newString.len(),
+            value: newString
+        }
+    }
+    // pub fn concatenateBulkString(arr: Option<Vec<String>>) -> String {
+
+    // }
+}
+
+impl Arrays {
+    fn new(size: u32) -> Self {
+        println!("Size of the array is = {size}");
+        Self {
+            size : size
+        }
+    }
+
+    pub fn form_array(value: String, mut arr: Option<Vec<String>>) -> Option<Vec<String>> {
+        // let inputArr: Vec<String>;
+        match  arr {
+            Some(ref mut array) => {
+                array.push(value);
+            }
+            None => {
+                println!("Can't append into None array, please initialize an array");
+            }
+        }
+        arr
+    }
+}
+
+impl ParseRedisCliInput {
+    pub fn new(value: String) -> Result<ParseRedisCliInput, NotRedisArrayInput> {
+        if value.chars().nth(0).unwrap() == String::from("*").chars().nth(0).unwrap() {
+            Ok(ParseRedisCliInput {
+                stringType: TypeString::Arrays(Arrays::new(value.chars()
+                                                                    .nth(1)
+                                                                    .unwrap()
+                                                                    .to_digit(10)
+                                                                    .unwrap()))
+            }) 
+        } else {
+            Err(NotRedisArrayInput {})
+        }
+    }
+    // pub fn parseInputArrayValue(value: String) -> TypeString {
+        
+    // }
+}
+
+impl ExecuteEcho {    
+    async fn echo(array : Vec<String>, writer_ref: &mut BufWriter<WriteHalf<BufStream<&mut TcpStream>>>) {  
+        let mut output : String = String::new();
+
+        for i in 1..array.len() {
+            if i > 1 { output.push(' ');}
+            output += array.get(i).unwrap();
+        }
+        eprintln!("Reached ExecuteEcho Struct {}", output);
+
+        if let Err(e) = writer_ref.write_all(BulkString::toBulkString(output).await
+                                                        .value
+                                                        .as_bytes())
+                                                        .await {
+                                                            eprintln!("Failed to write: {}", e);
+                                                        }
+
+        if let Err(e) = writer_ref.flush().await {
+            eprintln!("Failed to flush: {}", e);
+        }
+    }
+}
+
+impl ExecutePing {
+    async fn ping(array: Vec<String>, writer_ref: &mut BufWriter<WriteHalf<BufStream<&mut TcpStream>>>) {
+        let mut str : String = String::new();
+        for i in 1..array.len() {
+            str += array.get(i).unwrap();
+        }
+        str = "PONG".to_string();
+        eprintln!("Reached ExecutePing Struct");
+        // if let Err(e) = writer_ref.write_all(BulkString::toBulkString(str)
+        //                         .value
+        //                         .as_bytes()).await {
+        //                             eprintln!("Failed to write: {}", e);
+
+        if let Err(e) = writer_ref.write_all(SimpleString::new(str).await
+                                .value
+                                .as_bytes()).await {
+                                    eprintln!("Failed to write: {}", e);
+                                }
+        if let Err(e) = writer_ref.flush().await {
+            eprintln!("Failed to flush: {}", e);
+        }
+    }
+}
+
+impl Execute {
+    
+    pub async fn execute(arr: Option<Vec<String>>, writer_ref: &mut BufWriter<WriteHalf<BufStream<&mut TcpStream>>>) {
+        match arr {
+            Some(array) => {
+                match array.get(0) {
+                    Some(value) => {
+                        if value.eq_ignore_ascii_case("ECHO") {
+                            println!("reached Execute Struct");
+                            ExecuteEcho::echo(array, writer_ref).await;
+                        } 
+                        else if value.eq_ignore_ascii_case("PING") {
+                            ExecutePing::ping(array, writer_ref).await;
+                        }
+                    }
+                    None => {
+                        println!("Error: Element 0 of array is missing");
+                    }
+                }
+            }
+            None => {
+                println!("Error: No input array found");
+            }
+        }
+    }
+}
+
