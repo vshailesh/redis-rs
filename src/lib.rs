@@ -2,6 +2,18 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{
     BufWriter, AsyncWriteExt, AsyncWrite, BufReader, AsyncRead, BufStream, AsyncBufReadExt, ReadHalf, WriteHalf
 };
+use tokio::io::Error;
+use tokio::sync::Mutex;
+use std::collections::HashMap;
+use std::sync::Arc;
+
+pub mod database;
+pub mod execute_set;
+pub mod execute_get;
+
+use crate::execute_set::ExecuteSet;
+use crate::database::Database;
+use crate::execute_get::ExecuteGet;
 
 // use std::sync::mpsc::Receiver;
 // use std::{sync::mpsc, sync::Mutex, sync::Arc};
@@ -81,7 +93,7 @@ use tokio::io::{
 
 // how would you reconcile everything with this parser? 
 
-use std::io::Error;
+
 
 struct ExecuteEcho {}
 
@@ -146,9 +158,12 @@ impl SimpleString {
 
 impl BulkString {
     pub async fn new(input: String) -> Self {
+        let mut newString = String::new();
+        let length = input.len().to_string();
+        newString = "$".to_string() + &length + &"\r\n".to_string() + &input + &"\r\n".to_string(); 
         Self {
             len: input.len(),
-            value : input
+            value : newString
         }
     }
     pub async fn toBulkString(input: String) -> Self {
@@ -255,9 +270,10 @@ impl ExecutePing {
     }
 }
 
+
+
 impl Execute {
-    
-    pub async fn execute(arr: Option<Vec<String>>, writer_ref: &mut BufWriter<WriteHalf<BufStream<&mut TcpStream>>>) {
+    pub async fn execute(db: Arc<Database>, arr: Option<Vec<String>>, writer_ref: &mut BufWriter<WriteHalf<BufStream<&mut TcpStream>>>) {
         match arr {
             Some(array) => {
                 match array.get(0) {
@@ -268,6 +284,13 @@ impl Execute {
                         } 
                         else if value.eq_ignore_ascii_case("PING") {
                             ExecutePing::ping(array, writer_ref).await;
+                        }
+                        else if value.eq_ignore_ascii_case("SET") {
+                            ExecuteSet::set(db, array, writer_ref).await;
+                        }
+                        else if value.eq_ignore_ascii_case("GET") {
+                            // println!("Reaching lib.rs");
+                            ExecuteGet::get(db, array, writer_ref).await;
                         }
                     }
                     None => {
@@ -281,4 +304,3 @@ impl Execute {
         }
     }
 }
-

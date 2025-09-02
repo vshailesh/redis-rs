@@ -16,22 +16,28 @@ use codecrafters_redis::BulkString; // import BulkString struct
 use codecrafters_redis::Arrays; // import Redis Arrays input struct
 use codecrafters_redis::InputReader;
 use codecrafters_redis::Execute;
+use std::sync::Arc;
+// pub mod database;
 
+// use crate::database::Database;
 
 #[tokio::main] 
 async fn main() -> io::Result<()> {
     let listener = TcpListener::bind("127.0.0.1:6379").await?;
 
+    let db = std::sync::Arc::new(codecrafters_redis::database::Database::new().await);
+
     loop {
         let (mut socket, _) = listener.accept().await?;
+        let db_clone = std::sync::Arc::clone(&db);
 
         let handle = tokio::spawn(async move { 
-            handle_connection(&mut socket).await;
+            handle_connection(&mut socket, db_clone).await;
         });
     }
 }
 
-async fn handle_connection(stream: &mut TcpStream) {
+async fn handle_connection(stream: &mut TcpStream, db: Arc<codecrafters_redis::database::Database>) {
     println!("Handling connection");
 
     let bufStream = BufStream::new(stream);
@@ -49,7 +55,8 @@ async fn handle_connection(stream: &mut TcpStream) {
     
         match reader.read_line(&mut line).await {
             Ok(0) => {
-                println!("Client Disconnected")
+                println!("Client Disconnected");
+                break;
             } 
             Ok(total_bytes_received) => {
                 println!("{line}");
@@ -65,7 +72,8 @@ async fn handle_connection(stream: &mut TcpStream) {
                 }
             }
             Err(error) => {
-                println!("Error {error}")
+                println!("Error {error}");
+                break;
             }
         }
     
@@ -121,12 +129,12 @@ async fn handle_connection(stream: &mut TcpStream) {
             }
             None => {
                 println!("Client Input was not parsed properly");
+                continue;
             }
         }
-    
-        Execute::execute(full_input_array, &mut writer).await;
+        let db_clone = Arc::clone(&db);
+        Execute::execute(Arc::clone(&db_clone),full_input_array, &mut writer).await;
     }
-
 
 
     // just check if the input array is 
