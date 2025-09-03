@@ -9,6 +9,7 @@ use std::sync::Arc;
 use crate::SimpleString;
 use crate::BulkString;
 use crate::database::Database;
+use crate::database::DBError;
 
 pub struct ExecuteGet{}
 
@@ -27,7 +28,14 @@ impl ExecuteGet {
                                     eprintln!("Failed to write: {}", e);
                                 }
             }
-            Err(db_error) => {
+            Err(DBError::DBValueExpired) => {
+                if let Err(e) = writer_ref.write_all(BulkString::null_bulk_string().await
+                                .value
+                                .as_bytes()).await {
+                                    eprintln!("Failed to write: {}", e);
+                                }
+            }
+            Err(DBError::DBKeyDoesNotExist) => {
                 let response = "Key Not Found".to_string();
                 if let Err(e) = writer_ref.write_all(BulkString::new(response).await
                                 .value
@@ -35,6 +43,7 @@ impl ExecuteGet {
                                     eprintln!("Failed to write: {}", e);
                                 }
             }
+            // Err()
         }
 
         if let Err(e) = writer_ref.flush().await {

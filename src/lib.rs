@@ -177,6 +177,14 @@ impl BulkString {
             value: newString
         }
     }
+
+    pub async fn null_bulk_string() -> Self {
+        Self {
+            len: 2,
+            value: "$-1\r\n".to_string()
+        }
+    }
+
     // pub fn concatenateBulkString(arr: Option<Vec<String>>) -> String {
 
     // }
