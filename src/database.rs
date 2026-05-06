@@ -1,72 +1,83 @@
-use tokio::net::{TcpListener, TcpStream};
-use tokio::io::{
-    BufWriter, AsyncWriteExt, AsyncWrite, BufReader, AsyncRead, BufStream, AsyncBufReadExt, ReadHalf, WriteHalf
-};
-use tokio::io::{self, ErrorKind};
-use tokio::sync::Mutex;
+use chrono::{DateTime, TimeDelta, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
-use chrono::{Utc, DateTime, TimeDelta};
+use tokio::io::{self, ErrorKind};
+use tokio::io::{
+    AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, BufStream, BufWriter,
+    ReadHalf, WriteHalf,
+};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::Mutex;
 
 #[derive(Debug)]
 struct DBValueExpired;
 
 #[derive(Hash, Eq, PartialEq, Debug)]
 struct DBKey {
-    value: String
+    value: String,
 }
 
-pub enum DBError{
+pub enum DBError {
     DBValueExpired,
-    DBKeyDoesNotExist
+    DBKeyDoesNotExist,
 }
-
 
 struct DBValue {
     creation_time: DateTime<Utc>,
     updated_time: DateTime<Utc>,
     expire_ms: TimeDelta,
-    value: String
+    value: String,
 }
 
 pub struct Database {
-    db: Arc<Mutex<HashMap<DBKey, DBValue>>>
+    db: Arc<Mutex<HashMap<DBKey, DBValue>>>,
 }
 
 impl Database {
     pub async fn new() -> Self {
         let mut db = Arc::new(Mutex::new(HashMap::new()));
-        Self {
-            db
-        }
+        Self { db }
     }
 
-    pub async fn add_to_db_without_expire_ms(&self, key: String, value: String) -> Result<(), tokio::io::Error> {
+    pub async fn add_to_db_without_expire_ms(
+        &self,
+        key: String,
+        value: String,
+    ) -> Result<(), tokio::io::Error> {
         // eprintln!("added value into the Db");
         let mut db = self.db.lock().await;
         let dbkey = DBKey::new(key);
         let if_key_exists = db.contains_key(&dbkey);
-        
+
         let dbvalue = DBValue::new_without_expire_ms(value);
         db.insert(dbkey, dbvalue);
         Ok(())
     }
 
-    pub async fn add_to_db_with_expire_ms(&self, key: String, value: String, expire_ms: TimeDelta) -> Result<(), tokio::io::Error> {
+    pub async fn add_to_db_with_expire_ms(
+        &self,
+        key: String,
+        value: String,
+        expire_ms: TimeDelta,
+    ) -> Result<(), tokio::io::Error> {
         // eprintln!("added value into the Db");
         let mut db = self.db.lock().await;
         let dbkey = DBKey::new(key);
         let if_key_exists = db.contains_key(&dbkey);
-        
+
         let dbvalue = DBValue::new_with_expire_ms(value, expire_ms);
         db.insert(dbkey, dbvalue);
         Ok(())
     }
 
-    pub async fn remove_from_db(&self, key: String, writer_ref: &mut BufWriter<WriteHalf<BufStream<&mut TcpStream>>>) -> Result<String, tokio::io::Error> {
+    pub async fn remove_from_db(
+        &self,
+        key: String,
+        writer_ref: &mut BufWriter<WriteHalf<BufStream<&mut TcpStream>>>,
+    ) -> Result<String, tokio::io::Error> {
         let mut db = self.db.lock().await;
         let dbkey = DBKey::new(key);
-        
+
         if !db.contains_key(&dbkey) {
             Err(io::Error::new(ErrorKind::Other, "Key Not Found"))
         } else {
@@ -92,20 +103,15 @@ impl Database {
                 } else {
                     Err(DBError::DBValueExpired)
                 }
-            } 
-            None => {
-                Err(DBError::DBKeyDoesNotExist)
             }
-        }        
+            None => Err(DBError::DBKeyDoesNotExist),
+        }
     }
 }
 
-
 impl DBKey {
     fn new(key: String) -> Self {
-        Self {
-            value: key
-        }
+        Self { value: key }
     }
 }
 
@@ -116,8 +122,8 @@ impl DBValue {
             creation_time: time_now,
             updated_time: time_now,
             expire_ms: TimeDelta::try_milliseconds(31_556_952_000).unwrap(),
-            value: value
-        }         
+            value: value,
+        }
     }
     fn new_with_expire_ms(value: String, expire_ms: TimeDelta) -> Self {
         let time_now = Utc::now();
@@ -125,42 +131,40 @@ impl DBValue {
             creation_time: time_now,
             updated_time: time_now,
             expire_ms: expire_ms,
-            value: value
-        }         
+            value: value,
+        }
     }
 
     fn update_value(&self, value: String) -> Self {
         let time_now = Utc::now();
         Self {
-                creation_time: self.creation_time,
-                updated_time: time_now,
-                expire_ms: self.expire_ms,
-                value: value
+            creation_time: self.creation_time,
+            updated_time: time_now,
+            expire_ms: self.expire_ms,
+            value: value,
         }
     }
 
     fn update_value_with_expire_time(&self, value: String, expire_ms: TimeDelta) -> Self {
         let time_now = Utc::now();
         Self {
-                creation_time: self.creation_time,
-                updated_time: time_now,
-                expire_ms: expire_ms,
-                value: value
+            creation_time: self.creation_time,
+            updated_time: time_now,
+            expire_ms: expire_ms,
+            value: value,
         }
     }
 
     fn update_expire_time(&self, expire_ms: TimeDelta) -> Self {
         let time_now = Utc::now();
         Self {
-                creation_time: self.creation_time,
-                updated_time: time_now,
-                expire_ms: expire_ms,
-                value: self.value.clone()
+            creation_time: self.creation_time,
+            updated_time: time_now,
+            expire_ms: expire_ms,
+            value: self.value.clone(),
         }
     }
 }
-
-
 
 impl std::error::Error for DBValueExpired {}
 impl std::fmt::Display for DBValueExpired {
