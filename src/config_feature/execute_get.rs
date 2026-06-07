@@ -5,6 +5,11 @@ pub async fn get_from_cdb(key: &String) -> String {
     let lock = CONFIG_DB.lock().await;
     let key = CDBKey::new(key.clone());
 
-    let cdbval = lock.get(&key).unwrap();
-    cdbval.get_string_val()
+    let cdbval = lock.get(&key);
+    if let Some(val) = cdbval {
+        val.get_string_val()
+    } else {
+        // Transform this function to return Result later
+        "".to_string()
+    }
 }

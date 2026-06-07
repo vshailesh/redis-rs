@@ -15,6 +15,7 @@ use tokio::sync::Mutex;
 // use crate::config_feature::{ExecuteGet};
 use super::database::Database;
 use super::execute_get::ExecuteGet;
+use super::execute_key::ExecuteKey;
 use super::execute_set::ExecuteSet;
 use crate::config_feature::*;
 
@@ -181,7 +182,7 @@ impl ExecuteEcho {
             }
             output += array.get(i).unwrap();
         }
-        eprintln!("Reached ExecuteEcho Struct {}", output);
+        // eprintln!("Reached ExecuteEcho Struct {}", output);
 
         if let Err(e) = writer_ref
             .write_all(BulkString::toBulkString(output).await.value.as_bytes())
@@ -246,15 +247,10 @@ impl Execute {
                             // println!("Reaching lib.rs");
                             ExecuteGet::get(db, array, writer_ref).await;
                         } else if value.eq_ignore_ascii_case("CONFIG") {
-                            // println!("{}", &arry);
-                            // ExecuteConfig::get(array, writer_ref).await;
-                            //
-                            // eprintln!("WE have entered this section of the loop");
-                            // for val in &array {
-                            //     println!("{}", val);
-                            // }
-                            //
                             decider(array, writer_ref).await;
+                        } else if value.eq_ignore_ascii_case("KEYS") {
+                            // writer_ref.write_all("hey lady".as_bytes()).await;
+                            ExecuteKey::decider(db, array, writer_ref).await;
                         }
                     }
                     None => {

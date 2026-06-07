@@ -10,6 +10,7 @@ use common::InputReader;
 use common::ParseRedisCliInput;
 use common::SimpleString; // import SimpleString struct
 use common::TypeString; // import BulkString struct // import Redis Arrays input struct // import Enum
+mod execute_key;
 
 mod config_feature;
 use crate::config_feature::db::{CDBKey, CDBValue};
@@ -17,6 +18,8 @@ use crate::config_feature::setup_config_db;
 
 use http::{Request, Response, StatusCode};
 use lazy_static::lazy_static;
+mod rdb_parser;
+use rdb_parser::parse;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::convert::TryInto;
@@ -31,8 +34,14 @@ use tokio::io::{
 };
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
+
 lazy_static! {
     static ref CONFIG_DB: Arc<Mutex<HashMap<CDBKey, CDBValue>>> =
+        Arc::new(Mutex::new(HashMap::new()));
+}
+
+lazy_static! {
+    static ref REDIS_DB: Arc<Mutex<HashMap<CDBKey, CDBValue>>> =
         Arc::new(Mutex::new(HashMap::new()));
 }
 
@@ -44,6 +53,12 @@ async fn main() -> io::Result<()> {
     setup_config_db(args).await;
     let db = std::sync::Arc::new(database::Database::new().await);
 
+    //get rdb parser to run here first then
+    //we will talk to the later stages, pass the
+    //db reference to the parser so that during parsing
+    //we are able to put the key vaules directly into the
+    //hashmap.
+    let _ = parse(std::sync::Arc::clone(&db)).await;
     loop {
         let (mut socket, _) = listener.accept().await?;
         let db_clone = std::sync::Arc::clone(&db);

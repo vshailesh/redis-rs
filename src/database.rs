@@ -18,6 +18,7 @@ struct DBKey {
 }
 
 pub enum DBError {
+    DBEmpty,
     DBValueExpired,
     DBKeyDoesNotExist,
 }
@@ -107,11 +108,27 @@ impl Database {
             None => Err(DBError::DBKeyDoesNotExist),
         }
     }
+    pub async fn get_all_keys_star(&self) -> Result<Vec<String>, DBError> {
+        let db = self.db.lock().await;
+        let keys = db.keys();
+        let mut vec_keys: Vec<String> = Vec::new();
+        for key in keys {
+            vec_keys.push(key.to_owned_string());
+        }
+        if vec_keys.is_empty() {
+            Err(DBError::DBEmpty)
+        } else {
+            Ok(vec_keys)
+        }
+    }
 }
 
 impl DBKey {
     fn new(key: String) -> Self {
         Self { value: key }
+    }
+    fn to_owned_string(&self) -> String {
+        self.value.clone()
     }
 }
 
