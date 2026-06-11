@@ -26,7 +26,7 @@ impl ExecuteKey {
                 eprintln!("Failed to flush: {}", e);
             }
         } else {
-            eprintln!("AN ERROR OCCURED");
+            unimplemented!()
         }
     }
     pub async fn decider(
@@ -37,10 +37,9 @@ impl ExecuteKey {
         let key_pattern = array.get(1).unwrap();
         if key_pattern.contains("*") {
             Self::get_all_keys(std::sync::Arc::clone(&db), writer_ref).await;
-
-            //pritntln all keys using writer_ref
         } else {
             /*implement this piece when needed*/
+            unimplemented!()
         }
     }
 }

@@ -20,9 +20,6 @@ impl ExecuteGet {
         array: Vec<String>,
         writer_ref: &mut BufWriter<WriteHalf<BufStream<&mut TcpStream>>>,
     ) -> Result<(), tokio::io::Error> {
-        // let mut str : String = "OK".to_string();
-        // eprintln!("Reached ExecuteSet Struct");
-
         let key = array.get(1).unwrap();
         // println!("in our Execute Get");
         match Database::get_from_db(&db, key.clone()).await {
@@ -70,4 +67,3 @@ impl ExecuteGet {
         }
     }
 }
-

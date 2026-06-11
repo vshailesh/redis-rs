@@ -6,7 +6,7 @@ use std::io::{BufRead, Read};
 // use std::fs::File;
 use crate::database;
 use anyhow::Context;
-use chrono::TimeDelta;
+use chrono::{DateTime, TimeDelta, Utc};
 use std::path::Path;
 use std::path::PathBuf;
 use winnow::ascii::alphanumeric0;
@@ -81,7 +81,10 @@ pub async fn parse(db: std::sync::Arc<database::Database>) -> Result<()> {
                 .add_to_db_with_expire_ms(
                     key,
                     value,
-                    TimeDelta::try_milliseconds(millisecond_expire_ms_option.unwrap()).unwrap(),
+                    TimeDelta::try_milliseconds(
+                        millisecond_expire_ms_option.unwrap() - Utc::now().timestamp_millis(),
+                    )
+                    .unwrap(),
                 )
                 .await;
         } else {
